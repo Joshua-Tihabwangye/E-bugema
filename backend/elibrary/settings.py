@@ -5,6 +5,9 @@ Django settings for elibrary project.
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
+
+from urllib.parse import urlparse, parse_qsl
 
 load_dotenv()
 
@@ -83,35 +86,19 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'elibrary.wsgi.application'
-
-# --- UPDATED DATABASE CONFIGURATION FOR DOCKERIZED POSTGRES ---
-DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.sqlite3')
-DB_NAME = os.getenv('DB_NAME')
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-DB_HOST = os.getenv('DB_HOST') # Should resolve to 'postgres' container name
-DB_PORT = os.getenv('DB_PORT', '5432')
-
-if DB_NAME and DB_USER and DB_PASSWORD:
-    DATABASES = {
-        'default': {
-            'ENGINE': DB_ENGINE,
-            'NAME': DB_NAME,
-            'USER': DB_USER,
-            'PASSWORD': DB_PASSWORD,
-            'HOST': DB_HOST,
-            'PORT': DB_PORT,
-        }
-    }
-else:
-    # Fallback for local development outside Docker if variables are missing
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+# Define DATABASES using dj_database_url
+DATABASES = {
+    'default': dj_database_url.config(
+        # Reads the DATABASE_URL environment variable loaded from .env
+        default=os.environ.get('DATABASE_URL'),
+        
+        # Recommended for Neon/PostgreSQL:
+        conn_max_age=600, 
+        
+        # MANDATORY for Neon: ensures secure connection
+        ssl_require=True 
+    )
+}
 
 # --- END OF UPDATED DATABASE CONFIGURATION ---
 
