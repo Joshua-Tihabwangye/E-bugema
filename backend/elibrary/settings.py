@@ -5,6 +5,9 @@ Django settings for elibrary project.
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
+
+from urllib.parse import urlparse, parse_qsl
 
 load_dotenv()
 
@@ -27,16 +30,18 @@ DJANGO_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # ADDED: This app enables PostgreSQL-specific features (JSONField, ArrayField, etc.)
+    'django.contrib.postgres', 
 ]
 
 THIRD_PARTY_APPS = [
     'rest_framework',
-    'rest_framework_mongoengine',
     'rest_framework_simplejwt',
     'corsheaders',
     'drf_spectacular',
     'django_ratelimit',
     'django_filters',
+    # NOTE: The MongoDB app ('rest_framework_mongoengine') was removed here.
 ]
 
 LOCAL_APPS = [
@@ -47,6 +52,8 @@ LOCAL_APPS = [
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+
+AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -79,20 +86,22 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'elibrary.wsgi.application'
-
-# Database
-# We're using MongoDB, so we don't need Django's default database
+# Define DATABASES using dj_database_url
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.dummy',
-    }
+    'default': dj_database_url.config(
+        # Reads the DATABASE_URL environment variable loaded from .env
+        default=os.environ.get('DATABASE_URL'),
+        
+        # Recommended for Neon/PostgreSQL:
+        conn_max_age=600, 
+        
+        # MANDATORY for Neon: ensures secure connection
+        ssl_require=True 
+    )
 }
 
-# MongoDB Configuration
-import mongoengine
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/elibrary')
-mongoengine.connect(host=MONGODB_URI)
+# --- END OF UPDATED DATABASE CONFIGURATION ---
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -169,6 +178,7 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
+# NOTE: Adjusted example default CORS origin from port 5432 (Postgres) to a common frontend port like 8000/8080 or 3000/5173.
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
@@ -204,7 +214,7 @@ LOGGING = {
     },
 }
 
-# elibrary/settings.py
+# CACHE Configuration
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
@@ -213,5 +223,5 @@ CACHES = {
 }
 
 # Tell django-ratelimit which cache to use (optional if you want 'default')
-RATELIMIT_USE_CACHE = "default"   # or RATELIMIT_CACHE depending on your version
+RATELIMIT_USE_CACHE = "default" 
 RATELIMIT_ENABLE = True
