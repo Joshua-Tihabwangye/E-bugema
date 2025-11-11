@@ -76,11 +76,12 @@ class BookDetailSerializer(BookListSerializer):
         read_only_fields = BookListSerializer.Meta.read_only_fields + ['isbn', 'updated_at',]
 
 
+
 # --- Book Creation/Update Serializers ---
 class BookCreateUpdateSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
     
-# NEW (Corrected)
+    # These fields are for accepting human-readable names during WRITE (Create/Update)
     author_name = serializers.CharField(write_only=True, required=True, max_length=255)
     category_names = serializers.ListField(
         child=serializers.CharField(max_length=100),
@@ -93,28 +94,24 @@ class BookCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'language', 'year', 'isbn', 
             'pages', 'cover_image', 'file', 'file_type', 'is_published', 'tags', 
-            'author_name', 'category_names' # Use the new fields in Meta
+            'author_name', 'category_names' 
         ]
 
+    # --- create() method is correct and remains as you wrote it ---
     def create(self, validated_data):
         author_name = validated_data.pop('author_name')
         category_names = validated_data.pop('category_names', [])
         
-
-        author_instance, created = Author.objects.get_or_create(
-            name=author_name,
-            defaults={'name': author_name}
-        )
-
-        # 3. Create the Book instance
+        # 1. Get or create Author
+        author_instance, _ = Author.objects.get_or_create(name=author_name, defaults={'name': author_name})
+        
+        # 2. Create the Book instance (handles all remaining fields, including 'file')
         book = Book.objects.create(author=author_instance, **validated_data)
         
+        # 3. Get or create Categories and set the relationship
         category_instances = []
         for name in category_names:
-            category_instance, created = Category.objects.get_or_create(
-                name=name,
-                defaults={'name': name}
-            )
+            category_instance, _ = Category.objects.get_or_create(name=name, defaults={'name': name})
             category_instances.append(category_instance)
         
         if category_instances:
@@ -122,41 +119,34 @@ class BookCreateUpdateSerializer(serializers.ModelSerializer):
         
         return book
 
-
-def update(self, instance, validated_data):
-        # 1. Pop the new name-based fields from the validated data
+    # --- MOVED and FIXED update() method ---
+    def update(self, instance, validated_data):
+        # Pop the custom fields from the validated data
         author_name = validated_data.pop('author_name', None)
         category_names = validated_data.pop('category_names', None)
 
-        # 2. Handle Author update by name (if provided)
+        # Handle Author update
         if author_name is not None:
-            # Get or create the Author instance
-            author_instance, _ = Author.objects.get_or_create(
-                name=author_name,
-                defaults={'name': author_name}
-            )
+            author_instance, _ = Author.objects.get_or_create(name=author_name, defaults={'name': author_name})
             instance.author = author_instance
 
-        # 3. Handle Categories update by name (if provided)
+        # Handle Categories update
         if category_names is not None:
             category_instances = []
             for name in category_names:
-                # Get or create the Category instance
-                category_instance, _ = Category.objects.get_or_create(
-                    name=name,
-                    defaults={'name': name}
-                )
+                category_instance, _ = Category.objects.get_or_create(name=name, defaults={'name': name})
                 category_instances.append(category_instance)
             
-            # Set the ManyToMany relationship
             instance.categories.set(category_instances)
 
-        # 4. Handle all other standard fields
+        # Handle all standard fields, including 'cover_image' and 'file'
+        # If a new file is provided in the request, Django/DRF handles replacing the old file.
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         
         instance.save()
         return instance
+
 
 # --- Interaction Serializers (Like/Bookmark) ---
 
