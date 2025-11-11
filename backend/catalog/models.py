@@ -2,6 +2,7 @@ from django.db import models
 from django.utils.text import slugify
 from django.contrib.auth import get_user_model
 
+
 # Get the custom User model defined in the 'accounts' app
 User = get_user_model()
 
@@ -60,7 +61,7 @@ class Book(models.Model):
 
     # File and Image IDs (Assuming simple storage paths for Postgres)
     cover_image = models.ImageField(upload_to='covers/', null=True, blank=True)
-    file = models.FileField(upload_to='books/')
+    file = models.FileField(upload_to='books/', null=True, blank=True)
     
     # Denormalized counters (to match the logic in the seed script)
     view_count = models.PositiveIntegerField(default=0)

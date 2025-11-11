@@ -1,10 +1,16 @@
-from django.urls import path
+from django.urls import path, include
 from . import views
+from rest_framework.routers import DefaultRouter
+
+
+router = DefaultRouter()
+router.register(r'books', views.BookViewSet, basename='book')
 
 urlpatterns = [
+    # Include the router URLs
+    path('', include(router.urls)),
+
     path('categories/', views.CategoryListView.as_view(), name='category-list'),
-    path('books/', views.BookListCreateView.as_view(), name='book-list-create'),
-    path('books/<int:id>/', views.BookDetailView.as_view(), name='book-detail'),
 
 # Interaction/Utility Endpoints
     path('books/<int:book_id>/cover/', views.book_cover, name='book-cover'),

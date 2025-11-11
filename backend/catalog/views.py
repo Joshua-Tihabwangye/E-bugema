@@ -1,7 +1,7 @@
 import os
 import logging 
 from django.shortcuts import get_object_or_404   
-from rest_framework import generics, status, filters
+from rest_framework import generics, status, filters, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
@@ -17,6 +17,7 @@ from .serializers import (
     CategorySerializer, BookListSerializer, BookDetailSerializer,
     BookCreateUpdateSerializer, BookLikeSerializer, BookmarkSerializer
 )
+from rest_framework.parsers import MultiPartParser, FormParser
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -30,50 +31,46 @@ class CategoryListView(generics.ListAPIView):
 
 
 # --- BOOK LIST/CREATE VIEWS ---
-class BookListCreateView(generics.ListCreateAPIView):
+class BookViewSet(viewsets.ModelViewSet):
     """
-    GET: List books with search and filtering (Reviewing/Listing).
-    POST: Add a new book/resource.
+    Handles CRUD operations for Books, replacing BookListCreateView and BookDetailView.
     """
-    permission_classes = [AllowAny]
+    # REQUIRED for file upload to be detected by Swagger/DRF
+    parser_classes = (MultiPartParser, FormParser) 
+
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['categories__id', 'language', 'year', 'file_type'] 
-    search_fields = ['title', 'author', 'description', '@tags']
+    search_fields = ['title', 'author__name', 'description', '@tags'] # NOTE: changed to author__name for ForeignKey lookup
     ordering_fields = ['created_at', 'view_count', 'like_count', 'title']
     ordering = ['-created_at']
-    
+
     def get_queryset(self):
-        return Book.objects.filter(is_published=True)
+        # Apply filtering logic based on action
+        if self.action == 'list' or self.action == 'retrieve':
+            return Book.objects.filter(is_published=True)
+        return Book.objects.all()
 
     def get_serializer_class(self):
-        if self.request.method == 'POST':
+        if self.action in ['create', 'update', 'partial_update']:
             return BookCreateUpdateSerializer
+        if self.action == 'retrieve':
+            return BookDetailSerializer
         return BookListSerializer
 
     def get_permissions(self):
-        if self.request.method == 'POST':
+        # Apply permissions based on action
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsAuthenticated()] 
-        return super().get_permissions()
+        return [AllowAny()]
 
-
-# --- BOOK DETAIL VIEW ---
-class BookDetailView(generics.RetrieveAPIView):
-    """Get book details (single book review)"""
-    serializer_class = BookDetailSerializer
-    permission_classes = [AllowAny]
-    lookup_field = 'id' 
-    
-    def get_queryset(self):
-        return Book.objects.filter(is_published=True)
-    
     def retrieve(self, request, *args, **kwargs):
+        # Re-implement the view count logic from the old BookDetailView
         instance = self.get_object()
         Book.objects.filter(pk=instance.pk).update(view_count=F('view_count') + 1)
         instance.refresh_from_db()
-        
+
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
-
 
 # --- COVER IMAGE VIEW (Placeholder) ---
 @api_view(['GET'])
