@@ -104,10 +104,10 @@ def book_read_stream(request, book_id):
         if not book.file:
             return Response({'error': 'Book file not found'}, status=404)
 
-        # CORRECT public_id
+   
         try:
             rel_path = Path(book.file.name).relative_to('media')
-            public_id = rel_path.as_posix()
+            public_id = rel_path.as_posix()  
         except ValueError:
             return Response({'error': 'Invalid file path'}, status=400)
 
@@ -118,16 +118,16 @@ def book_read_stream(request, book_id):
         signed_url = cloudinary.utils.cloudinary_url(
             public_id,
             resource_type=resource_type,
+            type="upload",
             sign_url=True,
-            type="upload",            
-            version=1,
             expires_at=int(time.time()) + 3600,
             attachment=True,
         )[0]
 
+        logger.info("Signed URL: %s", signed_url)
         cloud_resp = requests.get(signed_url, stream=True, timeout=30)
         cloud_resp.raise_for_status()
-        # MIME type (same logic you already had)
+
         mime_map = {
             'PDF':   'application/pdf',
             'EPUB':  'application/epub+zip',
@@ -135,25 +135,23 @@ def book_read_stream(request, book_id):
         }
         content_type = mime_map.get(book.file_type, 'application/octet-stream')
 
-        # Filename for the Content-Disposition header
+    
         filename = os.path.basename(book.file.name) or 'file'
 
-        # Build the Django streaming response
         response = StreamingHttpResponse(
             cloud_resp.iter_content(chunk_size=8192),
             content_type=content_type,
         )
         response['Content-Disposition'] = f'inline; filename="{filename}"'
 
-        # Optional: forward Cloudinary's Content-Length if present
+    
         if 'Content-Length' in cloud_resp.headers:
             response['Content-Length'] = cloud_resp.headers['Content-Length']
 
         return response
 
-    # ----------------------------------------------------------------------
-    #  Error handling (mirrors your original view)
-    # ----------------------------------------------------------------------
+
+
     except Book.DoesNotExist:
         raise HttpResponseNotFound("Book not found")
     except requests.exceptions.HTTPError as exc:
