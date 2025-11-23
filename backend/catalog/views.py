@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404   
 from rest_framework import generics, status, filters, viewsets
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import Http404, HttpResponse
@@ -78,7 +78,7 @@ class BookViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         # Apply permissions based on action
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticated()] 
+            return [IsAdminUser()] 
         return [AllowAny()]
 
     def retrieve(self, request, *args, **kwargs):
@@ -169,6 +169,11 @@ def book_read_stream(request, book_id):
         raise HttpResponseNotFound("Book not found")
     except requests.exceptions.HTTPError as exc:
         logger.exception("Cloudinary request failed for book %s", book_id)
+        if exc.response.status_code == 404:
+             return Response(
+                {'error': 'File not found on storage server.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         return Response(
             {'error': f'Failed to retrieve file from Cloudinary: {exc}'},
             status=status.HTTP_502_BAD_GATEWAY,
@@ -208,7 +213,12 @@ def toggle_like(request, book_id):
         
         if like:
             like.delete()
-            Book.objects.filter(pk=book.pk).update(like_count=Max(0, F('like_count') - 1))
+            
+            # Re-fetch book to ensure we have latest data
+            book.refresh_from_db()
+            if book.like_count > 0:
+                book.like_count -= 1
+                book.save(update_fields=['like_count'])
             
             book.refresh_from_db()
             return Response({'liked': False, 'like_count': book.like_count})
@@ -236,7 +246,11 @@ def toggle_bookmark(request, book_id):
         
         if bookmark:
             bookmark.delete()
-            Book.objects.filter(pk=book.pk).update(bookmark_count=Max(0, F('bookmark_count') - 1))
+            # Re-fetch book
+            book.refresh_from_db()
+            if book.bookmark_count > 0:
+                book.bookmark_count -= 1
+                book.save(update_fields=['bookmark_count'])
             
             book.refresh_from_db()
             return Response({'bookmarked': False, 'bookmark_count': book.bookmark_count})
@@ -274,10 +288,10 @@ def search_suggestions(request):
                 'text': book.title,
                 'book_id': str(book.id)
             })
-        elif query.lower() in book.author.lower():
+        elif query.lower() in book.author.name.lower():
             suggestions.append({
                 'type': 'author',
-                'text': book.author,
+                'text': book.author.name,
                 'book_id': str(book.id)
             })
     

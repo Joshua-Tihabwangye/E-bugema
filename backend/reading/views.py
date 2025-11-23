@@ -225,7 +225,7 @@ def user_dashboard(request):
                 {
                     'id': str(book.id),
                     'title': book.title,
-                    'author': book.author,
+                    'author': book.author.name if book.author else "Unknown",
                     'cover_image': _absolute_media_url(request, book.cover_image),
                     'created_at': book.created_at
                 } for book in liked_books_data
@@ -234,9 +234,8 @@ def user_dashboard(request):
                 {
                     'id': str(book.id),
                     'title': book.title,
-                    'author': book.author,
+                    'author': book.author.name if book.author else "Unknown",
                     'cover_image': _absolute_media_url(request, book.cover_image),
-                    # Need to find the corresponding bookmark object
                     'location': next((b.location for b in bookmarked_books_qs if b.book_id == book.id), None),
                     'created_at': next((b.created_at for b in bookmarked_books_qs if b.book_id == book.id), None),
                 } for book in bookmarked_books_data

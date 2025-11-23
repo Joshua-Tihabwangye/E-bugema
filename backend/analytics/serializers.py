@@ -27,6 +27,11 @@ class ReadsPerDaySerializer(serializers.Serializer):
     count = serializers.IntegerField()
 
 
+class ReadsPerHourSerializer(serializers.Serializer):
+    hour = serializers.IntegerField()
+    count = serializers.IntegerField()
+
+
 class SearchTermSerializer(serializers.Serializer):
     term = serializers.CharField()
     count = serializers.IntegerField()
@@ -56,5 +61,6 @@ class AdminAnalyticsSerializer(serializers.Serializer):
     most_read_books = MostReadBookSerializer(many=True)
     most_liked_categories = CategoryLikesSerializer(many=True)
     reads_per_day = ReadsPerDaySerializer(many=True)
+    reads_per_hour = ReadsPerHourSerializer(many=True)
     top_search_terms = SearchTermSerializer(many=True)
 

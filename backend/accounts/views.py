@@ -1,6 +1,8 @@
 from rest_framework import status, generics
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -86,3 +88,66 @@ def update_profile(request):
         return Response(serializer.data)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# --- ADMIN VIEWS ---
+
+class AdminUserListView(generics.ListAPIView):
+    """List all users with online status for admins"""
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]
+    queryset = User.objects.all().order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Add online status
+        data = serializer.data
+        now = timezone.now()
+        threshold = now - timedelta(minutes=5)
+        
+        for user_data in data:
+            user = User.objects.get(id=user_data['id'])
+            # Check if user was active recently (using last_login as proxy for now)
+            # Ideally we'd have a middleware updating 'last_activity'
+            is_online = user.last_login and user.last_login > threshold
+            user_data['is_online'] = bool(is_online)
+            
+        return Response(data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAdminUser])
+def admin_update_user_role(request, user_id):
+    """Promote or demote a user"""
+    try:
+        user = User.objects.get(id=user_id)
+        new_role = request.data.get('role')
+        
+        if new_role not in ['ADMIN', 'USER']:
+            return Response({'error': 'Invalid role'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user.role = new_role
+        user.is_staff = (new_role == 'ADMIN')
+        user.save()
+        
+        return Response(UserSerializer(user).data)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAdminUser])
+def admin_delete_user(request, user_id):
+    """Delete a user"""
+    try:
+        user = User.objects.get(id=user_id)
+        # Prevent deleting self
+        if user.id == request.user.id:
+             return Response({'error': 'Cannot delete yourself'}, status=status.HTTP_400_BAD_REQUEST)
+             
+        user.delete()
+        return Response({'message': 'User deleted successfully'})
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
