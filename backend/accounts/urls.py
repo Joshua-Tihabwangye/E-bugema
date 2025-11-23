@@ -8,4 +8,9 @@ urlpatterns = [
     path('me/', views.me, name='me'),
     path('profile/', views.update_profile, name='update_profile'),
     path('logout/', views.logout, name='logout'),
+    
+    # Admin routes
+    path('users/', views.AdminUserListView.as_view(), name='admin_user_list'),
+    path('users/<uuid:user_id>/role/', views.admin_update_user_role, name='admin_update_user_role'),
+    path('users/<uuid:user_id>/', views.admin_delete_user, name='admin_delete_user'),
 ]

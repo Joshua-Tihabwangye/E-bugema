@@ -3,6 +3,7 @@ import itertools
 from datetime import timedelta
 
 from django.db.models import Count, Sum
+from django.db.models.functions import ExtractHour
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -63,6 +64,21 @@ def admin_analytics_overview(request):
             'count': book_opens
         })
     
+    # --- Reads per hour (Peak usage times) ---
+    # Group by hour of day (0-23)
+    reads_per_hour_qs = BookView.objects.filter(
+        viewed_at__gte=start_date
+    ).annotate(
+        hour=ExtractHour('viewed_at')
+    ).values('hour').annotate(
+        count=Count('id')
+    ).order_by('hour')
+    
+    reads_per_hour = [
+        {'hour': item['hour'], 'count': item['count']}
+        for item in reads_per_hour_qs
+    ]
+    
     # --- Active users (users who viewed books in last 7 days) ---
     week_ago = timezone.now() - timedelta(days=7)
     # Get distinct user IDs from BookView (the open-book event replacement)
@@ -121,6 +137,7 @@ def admin_analytics_overview(request):
             {'name': name, 'likes': likes} for name, likes in most_liked_categories
         ],
         'reads_per_day': reads_per_day,
+        'reads_per_hour': reads_per_hour,
         'top_search_terms': [
             {'term': term, 'count': count} for term, count in top_search_terms
         ]
