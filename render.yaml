@@ -2,6 +2,7 @@ services:
   - name: elibrary-web
     type: web
     runtime: python
+    pythonVersion: 3.12.0
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
