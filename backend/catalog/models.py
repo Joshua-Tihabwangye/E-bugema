@@ -83,16 +83,33 @@ class Book(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        """Override save to populate Cloudinary metadata"""
-        # If a file is attached, extract and store Cloudinary metadata
+        """Override save to populate Cloudinary metadata with canonical values"""
         if self.file:
-            # The file.name contains the path stored in Cloudinary
-            # For our custom storage, this will be like 'media/books/filename.pdf'
-            self.cloudinary_public_id = self.file.name
-            
-            # Get the full Cloudinary URL
-            if hasattr(self.file, 'url'):
-                self.file_url = self.file.url
+            file_name = getattr(self.file, 'name', '') or ''
+            file_url = getattr(self.file, 'url', '') or ''
+
+            # If we have a file name, it often contains the public_id in Cloudinary storage
+            if file_name:
+                # Remove leading slash if present
+                clean_name = file_name.lstrip('/')
+                # If it looks like a path (has slashes), it's likely the public_id
+                self.cloudinary_public_id = clean_name
+
+            # Fallback: if public_id is still just a simple filename but url has more info
+            if self.file_url and (not self.cloudinary_public_id or '/' not in self.cloudinary_public_id):
+                 try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(self.file_url)
+                    path_parts = parsed.path.split('/')
+                    if 'upload' in path_parts:
+                        idx = path_parts.index('upload')
+                        # Skip version if present
+                        if len(path_parts) > idx + 1 and path_parts[idx+1].startswith('v'):
+                            self.cloudinary_public_id = '/'.join(path_parts[idx+2:])
+                        else:
+                            self.cloudinary_public_id = '/'.join(path_parts[idx+1:])
+                 except:
+                     pass
         
         super().save(*args, **kwargs)
 

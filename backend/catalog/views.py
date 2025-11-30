@@ -1,9 +1,11 @@
 import os
+import re
 import logging 
 import cloudinary 
 import requests
+from requests.adapters import HTTPAdapter, Retry
 import time
-from pathlib import Path
+from urllib.parse import urlparse
 from django.utils import timezone
 from django.shortcuts import get_object_or_404   
 from rest_framework import generics, status, filters, viewsets
@@ -15,7 +17,7 @@ from django.http import Http404, HttpResponse
 from django.db.models import Q, Max, F 
 
 from django.conf import settings 
-from django.http import HttpResponse, Http404, FileResponse 
+from django.http import HttpResponse, Http404, FileResponse, StreamingHttpResponse, HttpResponseRedirect
 
 from .models import Category, Book, BookLike, Bookmark
 from .serializers import (
@@ -27,6 +29,17 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 # Initialize logger
 logger = logging.getLogger(__name__)
+
+# Shared HTTP session for Cloudinary downloads with retry on transient failures
+cloudinary_session = requests.Session()
+retry_config = Retry(
+    total=3,
+    backoff_factor=1,
+    allowed_methods=frozenset(['GET']),
+    status_forcelist=[500, 502, 503, 504],
+    raise_on_status=False,
+)
+cloudinary_session.mount('https://', HTTPAdapter(max_retries=retry_config))
 
 # --- CATEGORY VIEWS ---
 class CategoryListView(generics.ListAPIView):
@@ -132,84 +145,48 @@ def book_cover(request, book_id):
 @permission_classes([IsAuthenticated])
 def book_read_stream(request, book_id):
     try:
-        book = Book.objects.get(id=book_id, is_published=True)
-        if not book.file:
-            logger.error(f"Book {book_id} has no file attached")
-            return Response({'error': 'Book file not found'}, status=404)
+        book = get_object_or_404(Book, id=book_id, is_published=True)
 
-        # Use the stored cloudinary_public_id if available, otherwise fall back to file.name
-        if book.cloudinary_public_id:
-            public_id = book.cloudinary_public_id
-            logger.info(f"Using stored cloudinary_public_id: {public_id}")
+        public_id = book.cloudinary_public_id
+        if not public_id:
+            return Response(
+                {'error': 'Missing Cloudinary public_id'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Match this to HOW you uploaded the asset.
+        # If you uploaded PDFs as image-type (image/upload), use "image".
+        # If you uploaded them as raw (raw/upload), use "raw".
+        if book.file_type in ("PDF", "EPUB"):
+            resource_type = "image"   # change to "raw" if you upload PDFs as raw
+        elif book.file_type == "VIDEO":
+            resource_type = "video"
         else:
-            # Fallback: extract from file.name
-            public_id = book.file.name
-            logger.warning(f"No cloudinary_public_id stored, using file.name: {public_id}")
-        
-        # For Cloudinary raw resources, the public_id should NOT include the extension
-        # Strip the extension if present
-        if '.' in public_id:
-            public_id = public_id.rsplit('.', 1)[0]
-            logger.info(f"Stripped extension, final public_id: {public_id}")
+            resource_type = "image"
 
-        # Determine resource type
-        resource_type = "raw" 
-        logger.info(f"Resource type: {resource_type}")
-
-        # Generate signed Cloudinary URL
-        signed_url = cloudinary.utils.cloudinary_url(
+        signed_url, _ = cloudinary.utils.cloudinary_url(
             public_id,
             resource_type=resource_type,
-            type="upload",
+            type="upload",          # change if you use authenticated/private
             sign_url=True,
+            secure=True,
             expires_at=int(time.time()) + 3600,
-        )[0]
-
-        logger.info(f"Generated signed URL for book {book_id}: {signed_url}")
-        
-        # Fetch from Cloudinary
-        cloud_resp = requests.get(signed_url, stream=True, timeout=30)
-        cloud_resp.raise_for_status()
-
-        mime_map = {
-            'PDF':   'application/pdf',
-            'EPUB':  'application/epub+zip',
-            'VIDEO': 'video/mp4',
-        }
-        content_type = mime_map.get(book.file_type, 'application/octet-stream')
-
-        filename = os.path.basename(book.file.name) or 'file'
-        response = StreamingHttpResponse(
-            cloud_resp.iter_content(chunk_size=8192),
-            content_type=content_type,
         )
-        response['Content-Disposition'] = f'inline; filename="{filename}"'
 
-        if 'Content-Length' in cloud_resp.headers:
-            response['Content-Length'] = cloud_resp.headers['Content-Length']
-
-        return response
-
-    except Book.DoesNotExist:
-        logger.error(f"Book {book_id} not found")
-        return Response({'error': 'Book not found'}, status=404)
-    except requests.exceptions.HTTPError as exc:
-        logger.exception(f"Cloudinary request failed for book {book_id}")
-        if exc.response.status_code == 404:
-             return Response(
-                {'error': 'File not found on storage server.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        return Response(
-            {'error': f'Failed to retrieve file from Cloudinary: {exc}'},
-            status=status.HTTP_502_BAD_GATEWAY,
+        logger.info(
+            f"Returning Cloudinary URL for book {book_id}: "
+            f"public_id='{public_id}', resource_type='{resource_type}', url='{signed_url}'"
         )
+
+        return Response({'url': signed_url})
+
     except Exception as exc:
-        logger.exception(f"Unhandled streaming error for book {book_id}")
+        logger.exception(f"Error preparing book URL {book_id}")
         return Response(
-            {'error': 'An internal error occurred while streaming the file.', 'detail': str(exc)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            {'error': 'An internal error occurred.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
 
 
 @api_view(['GET'])
