@@ -1,26 +1,29 @@
 from rest_framework import serializers
-from .models import Category, Book, BookLike, Bookmark, Author 
+from .models import Category, Book, BookLike, Bookmark, Author
 from django.contrib.auth import get_user_model
 
-# Get the custom User model defined in your Django project
+# Custom User model
 User = get_user_model()
 
-# --- Utility Serializers ---
 
+# ---------------------------
+# CATEGORY SERIALIZER
+# ---------------------------
 class CategorySerializer(serializers.ModelSerializer):
     book_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Category
         fields = ['id', 'name', 'slug', 'description', 'book_count', 'created_at']
         read_only_fields = ['id', 'created_at']
-    
+
     def get_book_count(self, obj):
         return obj.books.filter(is_published=True).count()
 
 
-# --- Book List and Detail Serializers ---
-
+# ---------------------------
+# BOOK SERIALIZERS
+# ---------------------------
 class BookListSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.name', read_only=True)
     categories = CategorySerializer(many=True, read_only=True)
@@ -33,7 +36,7 @@ class BookListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = [
-            'id', 'title', 'author', 'description', 'isbn', 'language', 'year', 
+            'id', 'title', 'author', 'description', 'isbn', 'language', 'year',
             'pages', 'cover_image', 'file', 'file_type', 'is_published',
             'view_count', 'like_count', 'bookmark_count', 'tags',
             'categories', 'is_liked', 'is_bookmarked', 'reading_progress', 'created_at'
@@ -45,19 +48,18 @@ class BookListSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return obj.likes.filter(user=request.user).exists()
         return False
-    
+
     def get_is_bookmarked(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return obj.bookmarks.filter(user=request.user).exists()
         return False
-    
+
     def get_reading_progress(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             try:
-                from reading.models import ReadingProgress 
-                
+                from reading.models import ReadingProgress
                 progress = ReadingProgress.objects.filter(user=request.user, book=obj).first()
                 if progress:
                     return {
@@ -66,21 +68,18 @@ class BookListSerializer(serializers.ModelSerializer):
                         'completed': progress.completed
                     }
             except ImportError:
-                return None 
+                return None
         return None
 
     def _build_absolute_uri(self, obj, field_name):
-        """Build absolute URI for file fields stored on Cloudinary"""
+        """Safely build absolute URL for files or images."""
         field = getattr(obj, field_name, None)
         if not field:
             return None
-        
-        # For Cloudinary storage, field.url already returns the full Cloudinary URL
-        # Don't use request.build_absolute_uri as it will prepend the Django domain
         try:
-            if hasattr(field, 'url'):
-                return field.url  # Cloudinary URL is already absolute
-            return str(field) if field else None
+            if hasattr(field, 'url') and field.url:
+                return field.url  # Cloudinary / S3 already gives absolute URL
+            return None
         except Exception:
             return None
 
@@ -94,13 +93,13 @@ class BookListSerializer(serializers.ModelSerializer):
 class BookDetailSerializer(BookListSerializer):
     class Meta(BookListSerializer.Meta):
         fields = BookListSerializer.Meta.fields + ['isbn', 'updated_at']
-        read_only_fields = BookListSerializer.Meta.read_only_fields + ['isbn', 'updated_at',]
+        read_only_fields = BookListSerializer.Meta.read_only_fields + ['isbn', 'updated_at']
 
 
-
-# --- Book Creation/Update Serializers ---
+# ---------------------------
+# BOOK CREATE / UPDATE SERIALIZER
+# ---------------------------
 class BookCreateUpdateSerializer(serializers.ModelSerializer):
-    # These fields are for accepting human-readable names during WRITE (Create/Update)
     author_name = serializers.CharField(write_only=True, required=True, max_length=255)
     category_names = serializers.ListField(
         child=serializers.CharField(max_length=100),
@@ -111,68 +110,56 @@ class BookCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = [
-            'id', 'title', 'description', 'language', 'year', 'isbn', 
-            'pages', 'cover_image', 'file', 'file_type', 'is_published', 'tags', 
-            'author_name', 'category_names' 
+            'id', 'title', 'description', 'language', 'year', 'isbn',
+            'pages', 'cover_image', 'file', 'file_type', 'is_published', 'tags',
+            'author_name', 'category_names'
         ]
 
-    # --- create() method is correct and remains as you wrote it ---
     def create(self, validated_data):
         author_name = validated_data.pop('author_name')
         category_names = validated_data.pop('category_names', [])
-        
-        # 1. Get or create Author
-        author_instance, _ = Author.objects.get_or_create(name=author_name, defaults={'name': author_name})
-        
-        # 2. Create the Book instance (handles all remaining fields, including 'file')
+
+        author_instance, _ = Author.objects.get_or_create(name=author_name)
         book = Book.objects.create(author=author_instance, **validated_data)
-        
-        # 3. Get or create Categories and set the relationship
-        category_instances = []
-        for name in category_names:
-            category_instance, _ = Category.objects.get_or_create(name=name, defaults={'name': name})
-            category_instances.append(category_instance)
-        
-        if category_instances:
-            book.categories.set(category_instances)
-        
+
+        if category_names:
+            categories = []
+            for name in category_names:
+                category_instance, _ = Category.objects.get_or_create(name=name)
+                categories.append(category_instance)
+            book.categories.set(categories)
+
         return book
 
-    # --- MOVED and FIXED update() method ---
     def update(self, instance, validated_data):
-        # Pop the custom fields from the validated data
         author_name = validated_data.pop('author_name', None)
         category_names = validated_data.pop('category_names', None)
 
-        # Handle Author update
-        if author_name is not None:
-            author_instance, _ = Author.objects.get_or_create(name=author_name, defaults={'name': author_name})
+        if author_name:
+            author_instance, _ = Author.objects.get_or_create(name=author_name)
             instance.author = author_instance
 
-        # Handle Categories update
         if category_names is not None:
-            category_instances = []
+            categories = []
             for name in category_names:
-                category_instance, _ = Category.objects.get_or_create(name=name, defaults={'name': name})
-                category_instances.append(category_instance)
-            
-            instance.categories.set(category_instances)
+                category_instance, _ = Category.objects.get_or_create(name=name)
+                categories.append(category_instance)
+            instance.categories.set(categories)
 
-        # Handle all standard fields, including 'cover_image' and 'file'
-        # If a new file is provided in the request, Django/DRF handles replacing the old file.
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
+
         instance.save()
         return instance
 
 
-# --- Interaction Serializers (Like/Bookmark) ---
-
+# ---------------------------
+# LIKE / BOOKMARK SERIALIZERS
+# ---------------------------
 class BookLikeSerializer(serializers.ModelSerializer):
     class Meta:
         model = BookLike
-        fields = ['id', 'book', 'created_at'] 
+        fields = ['id', 'book', 'created_at']
         read_only_fields = ['id', 'created_at']
         extra_kwargs = {'book': {'write_only': True, 'required': True}}
 
