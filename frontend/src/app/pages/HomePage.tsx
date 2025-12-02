@@ -20,18 +20,16 @@ const HomePage = () => {
       {/* Hero Section */}
       <section className="grid gap-10 lg:grid-cols-2">
         <div className="space-y-6">
-          <div className="inline-block">
-            <span className="rounded-full bg-gradient-to-r from-brand-500 to-violet-500 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-lg">
-              Bugema University E-Library
-            </span>
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 dark:text-white/70">
+            Bugema University E-Library
+          </p>
           <h1 className="text-5xl font-bold leading-tight text-slate-900 dark:text-white md:text-6xl">
             Your Gateway to{' '}
             <span className="bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent">
               Bugema University&apos;s Digital Library
             </span>
           </h1>
-          <p className="text-lg leading-relaxed text-slate-700 dark:text-slate-300">
+          <p className="text-lg leading-relaxed text-slate-600 dark:text-white/70">
             Access course books, research materials, and recommended readings from Bugema University in one
             convenient online library. Designed to support students, staff, and researchers on and off campus,
             in the spirit of Bugema University &ndash; Excellence in Service.
