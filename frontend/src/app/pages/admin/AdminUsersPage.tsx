@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Shield, ShieldOff, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { getUsers, updateUserRole, deleteUser } from '../../../lib/api/admin';
 import { AdminUser } from '../../../lib/types';
 import { useAuthStore } from '../../../lib/store/auth';
@@ -27,11 +27,10 @@ const AdminUsersPage = () => {
         }
     };
 
-    const handlePromoteUser = async (userId: string, currentRole: string) => {
-        const newRole = currentRole === 'ADMIN' ? 'USER' : 'ADMIN';
+    const handleRoleChange = async (userId: string, newRole: 'ADMIN' | 'USER') => {
         try {
             await updateUserRole(userId, newRole);
-            toast.success(`User ${newRole === 'ADMIN' ? 'promoted' : 'demoted'} successfully`);
+            toast.success(`User role updated to ${newRole}`);
             loadUsers();
         } catch (error) {
             toast.error('Failed to update user role');
@@ -66,8 +65,8 @@ const AdminUsersPage = () => {
                         <thead className="bg-slate-900/50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th className="px-6 py-3">User</th>
-                                <th className="px-6 py-3">Role</th>
                                 <th className="px-6 py-3">Status</th>
+                                <th className="px-6 py-3">Role</th>
                                 <th className="px-6 py-3">Joined</th>
                                 <th className="px-6 py-3 text-right">Actions</th>
                             </tr>
@@ -87,43 +86,40 @@ const AdminUsersPage = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold leading-5 ${user.role === 'ADMIN'
-                                                ? 'bg-purple-500/20 text-purple-300'
-                                                : 'bg-green-500/20 text-green-300'
+                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${user.is_online
+                                            ? 'bg-green-500/20 text-green-300'
+                                            : 'bg-gray-500/20 text-gray-400'
                                             }`}>
-                                            {user.role}
+                                            <span className={`mr-1.5 h-2 w-2 rounded-full ${user.is_online ? 'bg-green-500' : 'bg-gray-500'}`}></span>
+                                            {user.is_online ? 'Online' : 'Offline'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${user.is_online
-                                                ? 'bg-green-500/20 text-green-300'
-                                                : 'bg-slate-500/20 text-slate-400'
-                                            }`}>
-                                            <span className={`mr-1.5 h-2 w-2 rounded-full ${user.is_online ? 'bg-green-500' : 'bg-slate-500'}`}></span>
-                                            {user.is_online ? 'Online' : 'Offline'}
-                                        </span>
+                                        <select
+                                            value={user.role}
+                                            onChange={(e) => handleRoleChange(user.id, e.target.value as 'ADMIN' | 'USER')}
+                                            disabled={user.id === currentUser?.id}
+                                            className={`rounded-full px-3 py-1 text-xs font-semibold leading-5 border-0 cursor-pointer ${user.role === 'ADMIN'
+                                                ? 'bg-purple-500/20 text-purple-300'
+                                                : 'bg-orange-500/20 text-orange-300'
+                                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        >
+                                            <option value="ADMIN">ADMIN</option>
+                                            <option value="USER">USER</option>
+                                        </select>
                                     </td>
                                     <td className="px-6 py-4">
                                         {new Date(user.created_at).toLocaleDateString()}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end space-x-2">
-                                            <button
-                                                onClick={() => handlePromoteUser(user.id, user.role)}
-                                                className="p-2 text-slate-400 hover:text-brand-400 transition-colors"
-                                                title={user.role === 'ADMIN' ? 'Demote to User' : 'Promote to Admin'}
-                                            >
-                                                {user.role === 'ADMIN' ? <ShieldOff className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUser(user.id)}
-                                                className="p-2 text-slate-400 hover:text-red-400 transition-colors"
-                                                title="Delete User"
-                                                disabled={user.id === currentUser?.id}
-                                            >
-                                                <Trash2 className="h-5 w-5" />
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={() => handleDeleteUser(user.id)}
+                                            className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                                            title="Delete User"
+                                            disabled={user.id === currentUser?.id}
+                                        >
+                                            <Trash2 className="h-5 w-5" />
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
