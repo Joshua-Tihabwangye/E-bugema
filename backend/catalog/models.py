@@ -141,3 +141,4 @@ class Bookmark(models.Model):
 
     def __str__(self):
         return f"Bookmark in {self.book.title} by {self.user.email} at {self.location}"
+
