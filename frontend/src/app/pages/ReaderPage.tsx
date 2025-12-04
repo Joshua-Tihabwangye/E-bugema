@@ -17,7 +17,7 @@ const ReaderPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const sessionStartTime = useRef<number>(Date.now());
-  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const updateTimeoutRef = useRef<number | null>(null);
 
   const { data: book, isLoading: bookLoading } = useQuery({
     queryKey: ['book', bookId],
