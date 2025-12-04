@@ -206,7 +206,7 @@ SIMPLE_JWT = {
 # Automatically include production and development URLs
 CORS_ALLOWED_ORIGINS_STR = os.getenv(
     'CORS_ALLOWED_ORIGINS', 
-    'https://bugema-e-library.vercel.app,http://localhost:5174,http://localhost:3000'
+    'https://bugema-e-library.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:3000'
 )
 # Strip trailing slashes to avoid mismatches
 CORS_ALLOWED_ORIGINS = [origin.strip().rstrip('/') for origin in CORS_ALLOWED_ORIGINS_STR.split(',') if origin.strip()]
