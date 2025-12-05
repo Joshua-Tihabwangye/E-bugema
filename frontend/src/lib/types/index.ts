@@ -150,6 +150,7 @@ export interface AdminOverview {
     total_categories: number;
     total_users: number;
     total_reads: number;
+    total_reads_period?: number;
     active_users_7d: number;
   };
   most_read_books: Array<{
@@ -157,6 +158,12 @@ export interface AdminOverview {
     title: string;
     author: string;
     view_count: number;
+    like_count: number;
+  }>;
+  most_liked_books: Array<{
+    id: string;
+    title: string;
+    author: string;
     like_count: number;
   }>;
   most_liked_categories: Array<{ name: string; likes: number }>;
